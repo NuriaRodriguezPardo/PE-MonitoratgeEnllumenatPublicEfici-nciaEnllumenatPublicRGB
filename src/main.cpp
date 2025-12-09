@@ -1,60 +1,78 @@
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <Arduino.h>
+#include <Wire.h>
+#include "Adafruit_TCS34725.h"
 
-const char *ssid = "Redmi Note 14";
-const char *password = "12345678";
+// --- Configuración de Pines ---
+// Puedes cambiar estos números según tu montaje real
+#define I2C_SDA 9
+#define I2C_SCL 8
 
-// URL de tu Sentilo (cambia puerto si es otro)
-String url = "http://147.83.83.21:8081/data/grup_1-102@Eficiencia_llum/sensor_de_llum/345";
-
-// Token del provider creado en catálogo
-String token = "e15a0aaa8d84c9bf7087e31fce2e23bc1fa3f8a64ce65914203a6648cb5df9fe";
-
-// Simulamos un sensor (sustituye por tu lectura)
-int pinSensor = 34;
+// Inicializamos el sensor con un tiempo de integración de 50ms y ganancia 4x
+// Esto ofrece un buen equilibrio entre velocidad y sensibilidad
+Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
 
 void setup()
 {
+    Serial.begin(115200);
 
-  Serial.begin(115200);
-  Serial.println("Iniciando proceso");
-  WiFi.begin(ssid, password);
+    // Configurar pin del LED
+    // pinMode(PIN_LED, OUTPUT);
+    // digitalWrite(PIN_LED, LOW); // Apagado al inicio
 
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nConectado al WiFi!");
+    // Iniciar I2C manualmente en los pines elegidos para ESP32-S3
+    Wire.begin(I2C_SDA, I2C_SCL);
+
+    Serial.println("Iniciando sensor TCS34725...");
+
+    if (tcs.begin())
+    {
+        Serial.println("Sensor encontrado correctamente.");
+    }
+    else
+    {
+        Serial.println("No se encuentra el TCS34725. Revisa las conexiones.");
+        Serial.println("Asegúrate de que SDA y SCL no están intercambiados.");
+        while (1)
+            ; // Detener ejecución si falla
+    }
 }
 
 void loop()
 {
-  int valor = 345;                        // analogRead(pinSensor);  // lectura del sensor (0-4095)
-  float lux = valor * (10000.0 / 4095.0); // ejemplo de conversión
+    uint16_t r, g, b, c, colorTemp, lux;
 
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    HTTPClient http;
-    http.begin(url);
+    // 1. Encender LED para iluminar la muestra
+    // digitalWrite(PIN_LED, HIGH);
+    delay(60); // Esperar un poco más que el tiempo de integración (50ms) para estabilizar
 
-    // Cabeceras
-    // http.addHeader("Content-Type", "application/json");
-    http.addHeader("IDENTITY_KEY", token);
+    // 2. Leer datos crudos
+    tcs.getRawData(&r, &g, &b, &c);
 
-    // JSON de envío
-    // String json = "{\"observations\":[{\"value\":\"" + String(lux) + "\"}]}";
+    // 3. Apagar LED (opcional, para ahorrar energía o no molestar)
+    // digitalWrite(PIN_LED, LOW);
 
-    int code = http.PUT("");
-    Serial.print("Código respuesta Sentilo: ");
-    Serial.println(code);
-    String respuesta = http.getString(); // Aquí obtienes toda la respuesta
-    Serial.println("Respuesta completa:");
-    Serial.println(respuesta);
+    // 4. Calcular temperatura de color y lux (fórmulas de la librería)
+    colorTemp = tcs.calculateColorTemperature(r, g, b);
+    lux = tcs.calculateLux(r, g, b);
 
-    http.end();
-  }
+    // 5. Mostrar resultados
+    Serial.print("Color Temp: ");
+    Serial.print(colorTemp);
+    Serial.print(" K - ");
+    Serial.print("Lux: ");
+    Serial.print(lux);
+    Serial.print(" - ");
+    Serial.print("R: ");
+    Serial.print(r);
+    Serial.print(" ");
+    Serial.print("G: ");
+    Serial.print(g);
+    Serial.print(" ");
+    Serial.print("B: ");
+    Serial.print(b);
+    Serial.print(" ");
+    Serial.print("C: ");
+    Serial.print(c);
+    Serial.println(" ");
 
-  delay(5000); // cada 5 segundos
+    delay(1000); // Pausa antes de la siguiente lectura
 }
