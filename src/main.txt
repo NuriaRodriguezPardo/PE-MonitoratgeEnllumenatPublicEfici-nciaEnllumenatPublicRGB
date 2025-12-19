@@ -16,51 +16,43 @@ String token = "e15a0aaa8d84c9bf7087e31fce2e23bc1fa3f8a64ce65914203a6648cb5df9fe
 #define I2C_SCL 8
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
 
-// --- CONFIGURACIÓN DE LOS LEDS ---
-// PINES SEGUROS (No uses el 6)
-const int PIN_LED_ROJO = 15;
-const int PIN_LED_VERDE = 5;
-const int PIN_LED_AZUL = 4;
-
-// Variables para la animación
-int brillo = 0;     // Intensidad actual
-int pasoFading = 5; // Velocidad de cambio (+5 sube, -5 baja)
-int turnoLed = 0;   // 0 = Rojo, 1 = Verde, 2 = Azul
-
-// Variables de tiempo (Millis)
-unsigned long tiempoAnteriorLED = 0;
-const long intervaloLED = 20; // Velocidad de la animación (menor = más rápido)
-
-unsigned long tiempoAnteriorWifi = 0;
-const long intervaloWifi = 5000; // Enviar cada 5 segundos
-
-// --- FUNCIÓN ENVIAR ---
+// --- FUNCIÓN AUXILIAR PARA ENVIAR ---
 void enviarASentilo(String nombreComponente, int valor)
 {
     if (WiFi.status() == WL_CONNECTED)
     {
         HTTPClient http;
         String urlCompleta = baseUrl + "/" + nombreComponente + "/" + String(valor);
+
+        // Descomenta la siguiente línea si quieres ver también las URLs que se envían
+        // Serial.println("Enviando a: " + urlCompleta);
+
         http.begin(urlCompleta);
         http.addHeader("IDENTITY_KEY", token);
+
         int code = http.PUT("");
+
+        if (code > 0)
+        {
+            // Si quieres ver confirmación de cada envío, descomenta esto:
+            // Serial.print("  -> Enviado " + nombreComponente + " (Código " + String(code) + ")");
+        }
+        else
+        {
+            Serial.print("  -> Error enviando " + nombreComponente + ": ");
+            Serial.println(http.errorToString(code));
+        }
         http.end();
+    }
+    else
+    {
+        Serial.println("Error: WiFi desconectado");
     }
 }
 
 void setup()
 {
     Serial.begin(115200);
-
-    // Configurar pines
-    pinMode(PIN_LED_ROJO, OUTPUT);
-    pinMode(PIN_LED_VERDE, OUTPUT);
-    pinMode(PIN_LED_AZUL, OUTPUT);
-
-    // Apagar todo al inicio
-    digitalWrite(PIN_LED_ROJO, LOW);
-    digitalWrite(PIN_LED_VERDE, LOW);
-    digitalWrite(PIN_LED_AZUL, LOW);
 
     // 1. Iniciar I2C y Sensor
     Wire.begin(I2C_SDA, I2C_SCL);
@@ -85,33 +77,6 @@ void setup()
 
 void loop()
 {
-    unsigned long tiempoActual = millis();
-
-    // ===========================================================
-    // TAREA 1: ANIMACIÓN SECUENCIAL (UNO A UNO)
-    // ===========================================================
-
-    analogWrite(PIN_LED_ROJO, 255);
-    analogWrite(PIN_LED_VERDE, 0); // Apagar los otros
-    analogWrite(PIN_LED_AZUL, 0);
-
-    /*delay(2000);
-
-    analogWrite(PIN_LED_ROJO, 0);
-    analogWrite(PIN_LED_VERDE, 255);
-    analogWrite(PIN_LED_AZUL, 0);
-
-    delay(2000);
-
-    analogWrite(PIN_LED_ROJO, 0);
-    analogWrite(PIN_LED_VERDE, 0);
-    analogWrite(PIN_LED_AZUL, 255);
-
-    delay(2000);*/
-
-    // ===========================================================
-    // TAREA 2: SENSOR Y WIFI (Cada 5 segundos)
-    // ===========================================================
     // --- A. LECTURA SENSOR ---
     uint16_t r, g, b, c;
     tcs.getRawData(&r, &g, &b, &c);
@@ -135,8 +100,6 @@ void loop()
     // --- B. ENVÍO DE LOS 4 COMPONENTES ---
     Serial.println("Iniciando subida a Sentilo...");
 
-    // _rambla, _ajuntament, _residencial, para los diferentes componentes en las diferentes ubicaicones
-
     enviarASentilo("sensor_de_llum", lux);
     delay(100);
     enviarASentilo("RGB_R", r);
@@ -145,5 +108,7 @@ void loop()
     delay(100);
     enviarASentilo("RGB_B", b);
 
-    // Serial.println("Subida finalizada. Esperando 5 segundos...");
+    Serial.println("Subida finalizada. Esperando 5 segundos...");
+
+    delay(5000);
 }
